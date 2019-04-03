@@ -9,7 +9,7 @@ BIN=$(lastword $(subst /, ,$(MAIN_PACKAGE)))
 IMAGE_TAG=openshift/origin-cluster-dns-operator
 
 ENVVAR=GOOS=linux CGO_ENABLED=0
-GOOS=linux
+GOOS=darwin
 GO_BUILD_RECIPE=GOOS=$(GOOS) go build -o $(BIN) $(MAIN_PACKAGE)
 
 .PHONY: build
