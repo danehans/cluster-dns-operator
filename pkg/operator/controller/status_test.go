@@ -27,6 +27,7 @@ func TestComputeOperatorStatusConditions(t *testing.T) {
 		description      string
 		noNamespace      bool
 		dnses            dnsesCount
+		previousVersions versions
 		reportedVersions versions
 		curVersions      versions
 		expected         conditions
@@ -53,35 +54,72 @@ func TestComputeOperatorStatusConditions(t *testing.T) {
 		{
 			description:      "versions match",
 			dnses:            dnsesCount{2, 2},
+			previousVersions: versions{"v1", "dns-v1", "cli-v1"},
 			reportedVersions: versions{"v1", "dns-v1", "cli-v1"},
 			curVersions:      versions{"v1", "dns-v1", "cli-v1"},
 			expected:         conditions{false, false, true},
 		},
 		{
-			description:      "operator version mismatch",
+			description:      "operator reported/current version mismatch",
 			dnses:            dnsesCount{2, 2},
-			reportedVersions: versions{"v1", "dns-v1", "cli-v1"},
+			previousVersions: versions{"v1", "dns-v1", "cli-v1"},
+			reportedVersions: versions{"v2", "dns-v1", "cli-v1"},
+			curVersions:      versions{"v1", "dns-v1", "cli-v1"},
+			expected:         conditions{false, true, true},
+		},
+		{
+			description:      "operator previous/current version mismatch",
+			dnses:            dnsesCount{2, 2},
+			previousVersions: versions{"v1", "dns-v1", "cli-v1"},
+			reportedVersions: versions{"v2", "dns-v1", "cli-v1"},
 			curVersions:      versions{"v2", "dns-v1", "cli-v1"},
 			expected:         conditions{false, true, true},
 		},
 		{
-			description:      "coredns operand version mismatch",
+			description:      "coredns operand reported/current version mismatch",
 			dnses:            dnsesCount{2, 2},
-			reportedVersions: versions{"v1", "dns-v1", "cli-v1"},
+			previousVersions: versions{"v1", "dns-v1", "cli-v1"},
+			reportedVersions: versions{"v1", "dns-v2", "cli-v1"},
+			curVersions:      versions{"v1", "dns-v1", "cli-v1"},
+			expected:         conditions{false, true, true},
+		},
+		{
+			description:      "coredns operand previous/current version mismatch",
+			dnses:            dnsesCount{2, 2},
+			previousVersions: versions{"v1", "dns-v1", "cli-v1"},
+			reportedVersions: versions{"v1", "dns-v2", "cli-v1"},
 			curVersions:      versions{"v1", "dns-v2", "cli-v1"},
 			expected:         conditions{false, true, true},
 		},
 		{
-			description:      "openshift-cli operand version mismatch",
+			description:      "openshift-cli operand reported/current version mismatch",
 			dnses:            dnsesCount{2, 2},
+			previousVersions: versions{"v1", "dns-v1", "cli-v2"},
 			reportedVersions: versions{"v1", "dns-v1", "cli-v1"},
 			curVersions:      versions{"v1", "dns-v1", "cli-v2"},
 			expected:         conditions{false, true, true},
 		},
 		{
-			description:      "operator, coredns and openshift-cli version mismatch",
+			description:      "openshift-cli operand previous/current version mismatch",
 			dnses:            dnsesCount{2, 2},
+			previousVersions: versions{"v1", "dns-v1", "cli-v1"},
 			reportedVersions: versions{"v1", "dns-v1", "cli-v1"},
+			curVersions:      versions{"v1", "dns-v1", "cli-v2"},
+			expected:         conditions{false, true, true},
+		},
+		{
+			description:      "operator, coredns and openshift-cli reported/current version mismatch",
+			dnses:            dnsesCount{2, 2},
+			previousVersions: versions{"v2", "dns-v2", "cli-v2"},
+			reportedVersions: versions{"v1", "dns-v1", "cli-v1"},
+			curVersions:      versions{"v2", "dns-v2", "cli-v2"},
+			expected:         conditions{false, true, true},
+		},
+		{
+			description:      "operator, coredns and openshift-cli previous/current version mismatch",
+			dnses:            dnsesCount{2, 2},
+			previousVersions: versions{"v1", "dns-v1", "cli-v1"},
+			reportedVersions: versions{"v2", "dns-v2", "cli-v2"},
 			curVersions:      versions{"v2", "dns-v2", "cli-v2"},
 			expected:         conditions{false, true, true},
 		},
@@ -93,6 +131,20 @@ func TestComputeOperatorStatusConditions(t *testing.T) {
 			namespace = &corev1.Namespace{}
 		}
 
+		previousVersions := []configv1.OperandVersion{
+			{
+				Name:    OperatorVersionName,
+				Version: tc.previousVersions.operator,
+			},
+			{
+				Name:    CoreDNSVersionName,
+				Version: tc.previousVersions.coreDNSOperand,
+			},
+			{
+				Name:    OpenshiftCLIVersionName,
+				Version: tc.previousVersions.openshiftCLIOperand,
+			},
+		}
 		reportedVersions := []configv1.OperandVersion{
 			{
 				Name:    OperatorVersionName,
@@ -140,7 +192,7 @@ func TestComputeOperatorStatusConditions(t *testing.T) {
 		}
 
 		conditions := r.computeOperatorStatusConditions([]configv1.ClusterOperatorStatusCondition{}, namespace,
-			tc.dnses.total, tc.dnses.available, reportedVersions)
+			tc.dnses.total, tc.dnses.available, previousVersions, reportedVersions)
 		conditionsCmpOpts := []cmp.Option{
 			cmpopts.IgnoreFields(configv1.ClusterOperatorStatusCondition{}, "LastTransitionTime", "Reason", "Message"),
 			cmpopts.EquateEmpty(),

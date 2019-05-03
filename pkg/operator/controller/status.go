@@ -60,7 +60,7 @@ func (r *reconciler) syncOperatorStatus() error {
 
 	co.Status.Versions = r.computeOperatorStatusVersions(oldStatus.Versions, allDNSesAvailable)
 	co.Status.Conditions = r.computeOperatorStatusConditions(oldStatus.Conditions, ns, dnsesTotal,
-		dnsesAvailable, co.Status.Versions)
+		dnsesAvailable, oldStatus.Versions, co.Status.Versions)
 
 	if !operatorStatusesEqual(*oldStatus, co.Status) {
 		if err := r.client.Status().Update(context.TODO(), co); err != nil {
@@ -158,7 +158,7 @@ func (r *reconciler) computeOperatorStatusVersions(oldVersions []configv1.Operan
 
 // computeOperatorStatusConditions computes the operator's current state.
 func (r *reconciler) computeOperatorStatusConditions(oldConditions []configv1.ClusterOperatorStatusCondition,
-	ns *corev1.Namespace, dnses, dnsesAvailable int,
+	ns *corev1.Namespace, dnses, dnsesAvailable int, oldVersions []configv1.OperandVersion,
 	curVersions []configv1.OperandVersion) []configv1.ClusterOperatorStatusCondition {
 	var oldDegradedCondition, oldProgressingCondition, oldAvailableCondition *configv1.ClusterOperatorStatusCondition
 	for i := range oldConditions {
@@ -174,7 +174,7 @@ func (r *reconciler) computeOperatorStatusConditions(oldConditions []configv1.Cl
 
 	conditions := []configv1.ClusterOperatorStatusCondition{
 		computeOperatorDegradedCondition(oldDegradedCondition, dnsesAvailable, dnses, ns),
-		r.computeOperatorProgressingCondition(oldProgressingCondition, dnsesAvailable, dnses, curVersions),
+		r.computeOperatorProgressingCondition(oldProgressingCondition, dnsesAvailable, dnses, oldVersions, curVersions),
 		computeOperatorAvailableCondition(oldAvailableCondition, dnsesAvailable),
 	}
 
@@ -208,7 +208,7 @@ func computeOperatorDegradedCondition(oldCondition *configv1.ClusterOperatorStat
 
 // computeOperatorProgressingCondition computes the operator's current Progressing status state.
 func (r *reconciler) computeOperatorProgressingCondition(oldCondition *configv1.ClusterOperatorStatusCondition, dnsesAvailable,
-	dnsesTotal int, curVersions []configv1.OperandVersion) configv1.ClusterOperatorStatusCondition {
+	dnsesTotal int, oldVersions []configv1.OperandVersion, curVersions []configv1.OperandVersion) configv1.ClusterOperatorStatusCondition {
 	progressingCondition := configv1.ClusterOperatorStatusCondition{
 		Type: configv1.OperatorProgressing,
 	}
@@ -231,6 +231,23 @@ func (r *reconciler) computeOperatorProgressingCondition(oldCondition *configv1.
 		case OpenshiftCLIVersionName:
 			if opv.Version != r.OpenshiftCLIImage {
 				messages = append(messages, fmt.Sprintf("Moving to openshift-cli image version %q.", r.OpenshiftCLIImage))
+			}
+		}
+	}
+
+	for _, opv := range oldVersions {
+		switch opv.Name {
+		case OperatorVersionName:
+			if opv.Version != r.OperatorReleaseVersion {
+				messages = append(messages, fmt.Sprintf("Moved to release version %q.", r.OperatorReleaseVersion))
+			}
+		case CoreDNSVersionName:
+			if opv.Version != r.CoreDNSImage {
+				messages = append(messages, fmt.Sprintf("Moved to coredns image version %q.", r.CoreDNSImage))
+			}
+		case OpenshiftCLIVersionName:
+			if opv.Version != r.OpenshiftCLIImage {
+				messages = append(messages, fmt.Sprintf("Moved to openshift-cli image version %q.", r.OpenshiftCLIImage))
 			}
 		}
 	}
